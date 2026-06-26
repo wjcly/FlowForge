@@ -1,0 +1,41 @@
+{
+  "name": "@formcraft/workflow-engine",
+  "version": "1.0.0",
+  "description": "Enterprise-grade workflow engine for Next.js — DAG-based execution with BPMN-aligned node types",
+  "main": "dist/index.js",
+  "module": "dist/index.mjs",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": [
+    "dist",
+    "src"
+  ],
+  "scripts": {
+    "build": "tsup src/index.ts --format cjs,esm --dts --sourcemap",
+    "dev": "tsup src/index.ts --format cjs,esm --dts --sourcemap --watch",
+    "clean": "rm -rf dist",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "keywords": [
+    "workflow",
+    "bpmn",
+    "dag",
+    "process-engine",
+    "orchestration",
+    "automation",
+    "nextjs"
+  ],
+  "license": "MIT",
+  "devDependencies": {
+    "tsup": "^8.3.0",
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.0"
+  }
+}
