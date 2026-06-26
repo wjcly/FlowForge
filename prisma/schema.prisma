@@ -1,0 +1,421 @@
+generator client {
+  provider = "prisma-client-js"
+}
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+model User {
+  id            String   @id @default(uuid()) @db.Uuid
+  email         String   @unique
+  name          String
+  passwordHash  String
+  avatarUrl     String?
+  emailVerified Boolean  @default(false)
+  emailVerifiedAt DateTime?
+  lastLoginAt   DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  teamMembers       TeamMember[]
+  ownedTeams        Team[]          @relation("TeamOwner")
+  createdWorkspaces Workspace[]     @relation("WorkspaceCreator")
+  createdForms      Form[]          @relation("FormCreator")
+  submissions       Submission[]    @relation("SubmissionAuthor")
+  auditLogs         AuditLog[]
+  notifications     Notification[]
+  storageFiles      StorageFile[]
+  @@index([email])
+}
+model Team {
+  id        String   @id @default(uuid()) @db.Uuid
+  name      String
+  description String?
+  slug      String   @unique
+  ownerId   String   @db.Uuid
+  owner     User     @relation("TeamOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  members   TeamMember[]
+  workspaces Workspace[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@index([slug])
+}
+model TeamMember {
+  id        String   @id @default(uuid()) @db.Uuid
+  teamId    String   @db.Uuid
+  team      Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  userId    String   @db.Uuid
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role      String   @default("viewer")
+  invitedBy String   @db.Uuid
+  invitedAt DateTime @default(now())
+  joinedAt  DateTime?
+  @@unique([teamId, userId])
+  @@index([teamId])
+}
+model Workspace {
+  id          String   @id @default(uuid()) @db.Uuid
+  name        String
+  description String?
+  icon        String?
+  color       String?
+  sortOrder   Int      @default(0)
+  teamId      String   @db.Uuid
+  team        Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  createdById String   @db.Uuid
+  createdBy   User     @relation("WorkspaceCreator", fields: [createdById], references: [id])
+  forms       Form[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  @@index([teamId])
+}
+model Form {
+  id            String        @id @default(uuid()) @db.Uuid
+  title         String
+  description   String        @default("")
+  slug          String
+  templateId    String?       @db.Uuid
+  fields        String        @default("[]")
+  sections      String        @default("[]")
+  settings      String        @default("{}")
+  publishCount  Int           @default(0)
+  embedCode     String?
+  customCss     String?
+  workspaceId   String        @db.Uuid
+  workspace     Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  createdById   String        @db.Uuid
+  createdBy     User          @relation("FormCreator", fields: [createdById], references: [id])
+  workflow      Workflow?
+  versions      FormVersion[]
+  submissions   Submission[]
+  templates     FormTemplate[] @relation("TemplateForms")
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  publishedAt   DateTime?
+  status        String        @default("draft")
+  @@unique([workspaceId, slug])
+  @@index([workspaceId])
+  @@index([status])
+}
+model FormTemplate {
+  id          String   @id @default(uuid()) @db.Uuid
+  name        String
+  description String?
+  category    String?
+  thumbnail   String?
+  fields      String   @default("[]")
+  sections    String   @default("[]")
+  settings    String   @default("{}")
+  isPublic    Boolean  @default(false)
+  usageCount  Int      @default(0)
+  createdById String?  @db.Uuid
+  forms       Form[]   @relation("TemplateForms")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+model FormVersion {
+  id          String   @id @default(uuid()) @db.Uuid
+  formId      String   @db.Uuid
+  form        Form     @relation(fields: [formId], references: [id], onDelete: Cascade)
+  version     Int
+  title       String
+  description String
+  fields      String   @default("[]")
+  sections    String   @default("[]")
+  settings    String   @default("{}")
+  changelog   String?
+  createdBy   String   @db.Uuid
+  createdAt   DateTime @default(now())
+  @@index([formId, version])
+}
+model Submission {
+  id          String          @id @default(uuid()) @db.Uuid
+  formId      String          @db.Uuid
+  form        Form            @relation(fields: [formId], references: [id], onDelete: Cascade)
+  formData    String
+  status      String          @default("submitted")
+  submittedById String?       @db.Uuid
+  submittedBy User?           @relation("SubmissionAuthor", fields: [submittedById], references: [id])
+  ipAddress   String?
+  userAgent   String?
+  referrer    String?
+  metadata    String?
+  values      SubmissionFieldValue[]
+  attachments FormAttachment[]
+  workflowExecutions WorkflowExecution[]
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+  @@index([formId])
+  @@index([formId, createdAt])
+  @@index([submittedById])
+}
+model SubmissionFieldValue {
+  id           String   @id @default(uuid()) @db.Uuid
+  submissionId String   @db.Uuid
+  submission   Submission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  fieldId      String
+  fieldType    String
+  value        String
+  createdAt    DateTime @default(now())
+  @@index([submissionId, fieldId])
+}
+model Workflow {
+  id            String          @id @default(uuid()) @db.Uuid
+  name          String
+  description   String?
+  enabled       Boolean         @default(true)
+  status        String          @default("active")
+  trigger       String          @default("on_submit")
+  triggerConfig String?
+  steps         String          @default("[]")
+  actions       String          @default("[]")
+  formId        String          @unique @db.Uuid
+  form          Form            @relation(fields: [formId], references: [id], onDelete: Cascade)
+  executions    WorkflowExecution[]
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+  @@index([formId])
+}
+model WorkflowExecution {
+  id              String          @id @default(uuid()) @db.Uuid
+  workflowId      String          @db.Uuid
+  workflow        Workflow        @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  formId          String          @db.Uuid
+  submissionId    String          @db.Uuid
+  submission      Submission      @relation(fields: [submissionId], references: [id])
+  status          String          @default("pending")
+  currentStepId   String?
+  currentActionId String?
+  stepResults     String          @default("{}")
+  errorMessage    String?
+  startedAt       DateTime        @default(now())
+  completedAt     DateTime?
+  retryCount      Int             @default(0)
+  @@index([workflowId])
+  @@index([formId])
+  @@index([submissionId])
+  @@index([status])
+}
+model StorageFile {
+  id                String   @id @default(uuid()) @db.Uuid
+  userId            String   @db.Uuid
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  originalName      String
+  key               String   @unique
+  mimeType          String
+  size              Int      @default(0)
+  type              String   @default("document")
+  relatedEntityId   String?
+  relatedEntityType String?
+  uploadedFrom      String?
+  attachments       FormAttachment[]
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}
+model FormAttachment {
+  id           String   @id @default(uuid()) @db.Uuid
+  submissionId String   @db.Uuid
+  submission   Submission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  fieldId      String
+  fileId       String   @db.Uuid
+  file         StorageFile @relation(fields: [fileId], references: [id])
+  sortOrder    Int      @default(0)
+  createdAt    DateTime @default(now())
+  @@index([submissionId, fieldId])
+}
+model Notification {
+  id         String       @id @default(uuid()) @db.Uuid
+  userId     String       @db.Uuid
+  user       User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title      String
+  body       String
+  channel    String       @default("in_app")
+  status     String       @default("pending")
+  payload    String?
+  error      String?
+  sentAt     DateTime?
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
+  @@index([userId, status])
+  @@index([userId, createdAt])
+}
+model NotificationTemplate {
+  id         String   @id @default(uuid()) @db.Uuid
+  name       String
+  channel    String
+  subject    String?
+  body       String
+  variables  String
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+// ─── Workflow Engine Tables (Phase 2) ────────────────────────
+// Engine-level persistence, separate from business Workflow/WorkflowExecution
+
+/// Process definition with version management
+model ProcessDefinitionRecord {
+  id            String   @id @default(uuid()) @db.Uuid
+  key           String   // business key, e.g. "order-approval"
+  name          String
+  version       Int
+  description   String?
+  startAt       String   // entry node reference
+  timeoutSeconds Int?
+  retryPolicy   String?  // JSON
+  states        String   // JSON: Record<string, StateNode>
+  outputMapping String?  // JSON
+  tenantId      String?
+  createdBy     String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  executions    WorkflowEngineExecution[]
+
+  @@unique([key, version])
+  @@index([key])
+  @@index([tenantId])
+}
+
+/// Engine execution instance (maps to WorkflowExecution type)
+model WorkflowEngineExecution {
+  id                        String   @id @default(uuid()) @db.Uuid
+  processDefinitionId       String   @db.Uuid
+  processDefinition         ProcessDefinitionRecord @relation(fields: [processDefinitionId], references: [id])
+  processDefinitionKey      String
+  processDefinitionVersion  Int
+
+  status                    String   @default("pending")
+  input                     String?  // JSON
+  output                    String?  // JSON
+  variables                 String   @default("{}") // JSON
+
+  currentActivityId         String?
+  currentRetryCount         Int      @default(0)
+
+  startedAt                 DateTime @default(now())
+  completedAt               DateTime?
+  failedReason              String?
+  failedError               String?
+
+  tenantId                  String?
+  correlationId             String?
+
+  nodeSnapshots             NodeSnapshotRecord[]
+  events                    ExecutionEventRecord[]
+  userTasks                 UserTaskRecord[]
+
+  @@index([processDefinitionId])
+  @@index([status])
+  @@index([tenantId])
+  @@index([correlationId])
+  @@index([startedAt])
+}
+
+/// Node execution snapshot
+model NodeSnapshotRecord {
+  id           String   @id @default(uuid()) @db.Uuid
+  executionId  String   @db.Uuid
+  execution    WorkflowEngineExecution @relation(fields: [executionId], references: [id], onDelete: Cascade)
+
+  nodeId       String
+  nodeName     String?
+  nodeType     String
+
+  status       String   @default("pending")
+  input        String?  // JSON
+  output       String?  // JSON
+  error        String?
+  retryCount   Int      @default(0)
+
+  startedAt    DateTime?
+  completedAt  DateTime?
+
+  orderIndex   Int
+
+  @@index([executionId])
+  @@index([executionId, nodeId])
+}
+
+/// Execution event log (Event Sourcing)
+model ExecutionEventRecord {
+  id              String   @id @default(uuid()) @db.Uuid
+  executionId     String   @db.Uuid
+  execution       WorkflowEngineExecution @relation(fields: [executionId], references: [id], onDelete: Cascade)
+
+  eventType       String
+  nodeId          String?
+  payload         String?  // JSON
+  sequenceNumber  Int
+
+  createdAt       DateTime @default(now())
+
+  @@index([executionId])
+  @@index([executionId, sequenceNumber])
+}
+
+/// User task instance
+model UserTaskRecord {
+  id               String   @id @default(uuid()) @db.Uuid
+  executionId      String   @db.Uuid
+  execution        WorkflowEngineExecution @relation(fields: [executionId], references: [id], onDelete: Cascade)
+  nodeId           String
+
+  assigneeId       String?
+  candidateUsers   String?  // JSON array
+  candidateGroups  String?  // JSON array
+
+  status           String   @default("pending")
+
+  formDefinition   String?  // JSON
+  formResult       String?  // JSON
+  comment          String?
+
+  priority         Int      @default(0)
+  dueDate          DateTime?
+  slaDeadline      DateTime?
+
+  createdBy        String?
+  completedBy      String?
+  completedAt      DateTime?
+  createdAt        DateTime @default(now())
+
+  @@index([assigneeId])
+  @@index([status])
+  @@index([executionId])
+}
+
+/// Timer entry for scheduled execution
+model TimerRecord {
+  id             String   @id @default(uuid()) @db.Uuid
+  executionId    String?  @db.Uuid
+
+  callbackType   String   // "timer" | "retry" | "scheduled_trigger"
+  callbackData   String   @default("{}") // JSON
+
+  fireAt         DateTime
+  retries        Int      @default(0)
+  maxRetries     Int      @default(3)
+
+  status         String   @default("pending")
+  createdAt      DateTime @default(now())
+
+  @@index([fireAt])
+  @@index([status])
+  @@index([executionId])
+}
+
+model AuditLog {
+  id         String  @id @default(uuid()) @db.Uuid
+  userId     String? @db.Uuid
+  user       User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+  action     String
+  entityType String
+  entityId   String
+  changes    String?
+  ipAddress  String?
+  userAgent  String?
+  createdAt  DateTime @default(now())
+  @@index([userId])
+  @@index([entityType, entityId])
+  @@index([createdAt])
+}
